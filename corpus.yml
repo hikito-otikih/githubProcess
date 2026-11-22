@@ -1,0 +1,41 @@
+name: Balanced corpus round 6
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [.github/workflows/corpus.yml]
+permissions:
+  contents: read
+concurrency: balanced-corpus-round-6
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      HF_DATASET_REPO: ${{ vars.HF_DATASET_REPO || 'tonhuynhchi/wrongway-corpus-shards' }}
+    steps:
+      - run: python -m pip install huggingface_hub
+      - name: Fetch verified collector
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python - <<'PY'
+          import hashlib, os, shutil
+          from huggingface_hub import hf_hub_download
+          from pathlib import Path
+          src = Path(hf_hub_download(os.environ["HF_DATASET_REPO"], "balanced-v1/inputs/round6.py", repo_type="dataset"))
+          if hashlib.sha256(src.read_bytes()).hexdigest() != "ae770a85803dc41ee8f48f598e9556af31a0d5c4255d92944bec72358705c7b9":
+              raise ValueError("Collector checksum mismatch")
+          shutil.copyfile(src, "collector.py")
+          PY
+      - name: Run matched seats
+        run: WRONGWAY_OUT="$PWD/output/corpus" python collector.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: round-6
+          path: output/rounds_0006_0006.zip
+          if-no-files-found: error
+      - name: Publish shard
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: hf upload "$HF_DATASET_REPO" output/rounds_0006_0006.zip balanced-v1/raw/github/rounds_0006_0006.zip --repo-type dataset
